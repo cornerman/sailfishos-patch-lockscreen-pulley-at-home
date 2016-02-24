@@ -1,0 +1,8 @@
+{
+    "name": "Lockscreen pulley at home",
+    "description": "Show the lockscreen pulldown menu in the switcher on the homescreen",
+    "category": "homescreen",
+    "infos": {
+        "maintainer": "cornerman"
+    }
+}

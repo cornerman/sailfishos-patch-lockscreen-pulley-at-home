@@ -1,0 +1,78 @@
+diff --git a/usr/share/lipstick-jolla-home-qt5/switcher/Switcher.qml b/usr/share/lipstick-jolla-home-qt5/switcher/Switcher.qml
+index 410f9ab..21fe42c 100644
+--- a/usr/share/lipstick-jolla-home-qt5/switcher/Switcher.qml
++++ b/usr/share/lipstick-jolla-home-qt5/switcher/Switcher.qml
+@@ -6,6 +6,7 @@
+ ****************************************************************************/
+ 
+ import QtQuick 2.0
++import org.nemomobile.configuration 1.0
+ import org.nemomobile.lipstick 0.1
+ import org.nemomobile.ngf 1.0
+ import com.jolla.lipstick 0.1
+@@ -47,7 +48,7 @@ SilicaFlickable {
+ 
+     contentHeight: Math.ceil(switcherWrapper.y + switcherWrapper.height)
+ 
+-    interactive: contentHeight > height || closeApplicationEnabled
++    interactive: contentHeight > height || pullDownMenu.visible
+ 
+     onCloseApplicationEnabledChanged: {
+         minimizeLaunchingWindows()
+@@ -115,9 +116,9 @@ SilicaFlickable {
+     }
+ 
+     property bool closePending
+-    property bool housekeepingMenuActive: housekeepingMenu.active
++    property bool housekeepingMenuActive: pullDownMenu.active
+     onHousekeepingMenuActiveChanged: {
+-        if (!housekeepingMenuActive && closePending) {
++        if (closeApplicationEnabled && !housekeepingMenuActive && closePending) {
+             closePending = false
+             closeAll()
+         }
+@@ -125,11 +126,42 @@ SilicaFlickable {
+ 
+     onMovementStarted: minimizeLaunchingWindows()
+ 
++    ConfigurationValue {
++        id: shortcutsConfig
++
++        key: "/desktop/lipstick-jolla-home/lock_screen_shortcuts"
++        defaultValue: []
++    }
++
+     PullDownMenu {
+-        id: housekeepingMenu
+-        visible: switcherRoot.closeApplicationEnabled
++        id: pullDownMenu
++        visible: switcherRoot.closeApplicationEnabled || (Lipstick.compositor.systemInitComplete && shortcutRepeater.count && Lipstick.compositor.switcherLayer.scale === 1.0)
++
++        property var launchObject
++
++        Repeater {
++            id: shortcutRepeater
++            model: LauncherWatcherModel {
++                filePaths: shortcutsConfig.value
++                onFilePathsChanged: shortcutsConfig.value = filePaths
++            }
++
++            MenuItem {
++                visible: !switcherRoot.closeApplicationEnabled && model.object.isValid
++                text: model.object.title
++                onClicked: pullDownMenu.launchObject = model.object
++            }
++        }
++
++        onActiveChanged: {
++            if (!switcherRoot.closeApplicationEnabled && !active && launchObject) {
++                switcher.activateWindowFor(launchObject, true)
++                launchObject = null
++            }
++        }
+ 
+         MenuItem {
++            visible: switcherRoot.closeApplicationEnabled
+             //: Menu item in pull down menu, closes all open applications
+             //% "Close all"
+             text: qsTrId("lipstick-jolla-home-me-close_all")
