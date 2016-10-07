@@ -1,16 +1,20 @@
 diff --git a/usr/share/lipstick-jolla-home-qt5/switcher/Switcher.qml b/usr/share/lipstick-jolla-home-qt5/switcher/Switcher.qml
-index 410f9ab..21fe42c 100644
+index 86a9624..6b49668 100644
 --- a/usr/share/lipstick-jolla-home-qt5/switcher/Switcher.qml
 +++ b/usr/share/lipstick-jolla-home-qt5/switcher/Switcher.qml
-@@ -6,6 +6,7 @@
- ****************************************************************************/
+@@ -7,8 +7,11 @@
  
  import QtQuick 2.0
-+import org.nemomobile.configuration 1.0
  import org.nemomobile.lipstick 0.1
++import org.nemomobile.configuration 1.0
++import org.nemomobile.systemsettings 1.0
  import org.nemomobile.ngf 1.0
  import com.jolla.lipstick 0.1
-@@ -47,7 +48,7 @@ SilicaFlickable {
++import com.jolla.settings.system 1.0
+ import Sailfish.Silica 1.0
+ import Sailfish.Silica.private 1.0
+ import Sailfish.Lipstick 1.0
+@@ -48,7 +51,7 @@ SilicaFlickable {
  
      contentHeight: Math.ceil(switcherWrapper.y + switcherWrapper.height)
  
@@ -19,7 +23,7 @@ index 410f9ab..21fe42c 100644
  
      onCloseApplicationEnabledChanged: {
          minimizeLaunchingWindows()
-@@ -115,9 +116,9 @@ SilicaFlickable {
+@@ -125,9 +128,9 @@ SilicaFlickable {
      }
  
      property bool closePending
@@ -31,15 +35,112 @@ index 410f9ab..21fe42c 100644
              closePending = false
              closeAll()
          }
-@@ -125,11 +126,42 @@ SilicaFlickable {
+@@ -135,11 +138,162 @@ SilicaFlickable {
  
      onMovementStarted: minimizeLaunchingWindows()
  
 +    ConfigurationValue {
 +        id: shortcutsConfig
 +
++        function isDesktopFile(path) {
++            return (path.lastIndexOf(".desktop") == path.length - 8)
++        }
++
++        property var desktopFiles: {
++            var files = []
++            for (var i = 0; i < value.length; ++i) {
++                if (isDesktopFile(value[i])) {
++                    files.push(value[i])
++                }
++            }
++            return files
++        }
++
++        function setDesktopFiles(files) {
++            var shortcuts = []
++            for (var i = 0; i < value.length; ++i) {
++                if (isDesktopFile(value[i])) {
++                if (files.indexOf(value[i]) != -1) {
++                    shortcuts.push(value[i])
++                    }
++                } else {
++                    shortcuts.push(value[i])
++                }
++            }
++            for (var i = 0; i < files.length; ++i) {
++                if (shortcuts.indexOf(files[i]) == -1) {
++                    shortcuts.push(files[i])
++                }
++            }
++            value = shortcuts
++        }
++
 +        key: "/desktop/lipstick-jolla-home/lock_screen_shortcuts"
 +        defaultValue: []
++    }
++
++    LauncherWatcherModel {
++        id: launcherModel
++
++        function itemForFilePath(path) {
++            for (var i = 0; i < itemCount; ++i) {
++                var item = get(i)
++                if (item.filePath == path) {
++                    return item
++                }
++            }
++        }
++
++        filePaths: shortcutsConfig.desktopFiles
++        onFilePathsChanged: shortcutsConfig.setDesktopFiles(filePaths)
++    }
++
++    QuickActionsModel {
++        id: actionModel
++
++        function isMuteAction(path) {
++            return path == "/usr/share/lipstick/quickactions/silence_sounds"
++        }
++
++        function itemForFilePath(path) {
++            for (var i = 0; i < count; ++i) {
++                var item = get(i)
++                if (item.path == path) {
++                    return item
++                }
++            }
++        }
++
++        function activate(path) {
++            for (var i = 0; i < count; ++i) {
++                var item = get(i)
++                if (item.path == path) {
++                    triggerAction(i)
++                    return
++                }
++            }
++        }
++
++        showPotential: true
++    }
++
++    ProfileControl {
++        id: profileControl
++
++        property bool isSilent: profile == "silent" || profile.ringerVolume == 0
++
++        function toggleSilent() {
++            if (isSilent) {
++                if (profile == "silent") {
++                    profile = "general"
++                }
++                if (ringerVolume == 0) {
++                    ringerVolume = 60
++                }
++            } else {
++                profile = "silent"
++            }
++        }
 +    }
 +
      PullDownMenu {
@@ -48,26 +149,49 @@ index 410f9ab..21fe42c 100644
 +        id: pullDownMenu
 +        visible: switcherRoot.closeApplicationEnabled || (Lipstick.compositor.systemInitComplete && shortcutRepeater.count && Lipstick.compositor.switcherLayer.scale === 1.0)
 +
-+        property var launchObject
++        property var menuAction
 +
 +        Repeater {
 +            id: shortcutRepeater
-+            model: LauncherWatcherModel {
-+                filePaths: shortcutsConfig.value
-+                onFilePathsChanged: shortcutsConfig.value = filePaths
-+            }
++
++            model: shortcutsConfig.value
 +
 +            MenuItem {
-+                visible: !switcherRoot.closeApplicationEnabled && model.object.isValid
-+                text: model.object.title
-+                onClicked: pullDownMenu.launchObject = model.object
++                property bool isMute: actionModel.isMuteAction(modelData)
++                property bool isApp: shortcutsConfig.isDesktopFile(modelData)
++                property LauncherItem launcherItem: isApp ? launcherModel.itemForFilePath(modelData) : null
++                property var actionItem: !isMute && !isApp && actionModel.count ? actionModel.itemForFilePath(modelData) : undefined
++
++                visible: text != '' && !switcherRoot.closeApplicationEnabled
++                text: {
++                    if (isMute) {
++                        return profileControl.isSilent ?
++                            //: Menu item in pull down menu in lock screen, selecting item sets sounds on
++                            //% "Switch sounds on"
++                            qsTrId("lipstick-jolla-home-me-sounds_on") :
++                            //: Menu item in pull down menu in lock screen, selecting item sets sounds off
++                            //% "Silence sounds"
++                            qsTrId("lipstick-jolla-home-me-sounds_off")
++                    }
++                    return isApp ? (launcherItem && launcherItem.isValid ? launcherItem.title : '') : (actionItem ? actionItem.title : '')
++                }
++                onClicked: pullDownMenu.menuAction = isApp ? launcherItem : (isMute ? ({ 'path': modelData }) : actionItem)
 +            }
 +        }
 +
 +        onActiveChanged: {
-+            if (!switcherRoot.closeApplicationEnabled && !active && launchObject) {
-+                switcher.activateWindowFor(launchObject, true)
-+                launchObject = null
++            if (!switcherRoot.closeApplicationEnabled && !active && menuAction) {
++                if ('exec' in menuAction) {
++                    Desktop.instance.switcher.activateWindowFor(menuAction, true)
++                } else {
++                    if (actionModel.isMuteAction(menuAction.path)) {
++                        profileControl.toggleSilent()
++                    } else {
++                        Lipstick.compositor.goToSwitcher(true)
++                        actionModel.activate(menuAction.path)
++                    }
++                }
++                menuAction = undefined
 +            }
 +        }
  

@@ -1,13 +1,13 @@
 Name: sailfishos-patch-lockscreen-pulley-at-home
 BuildArch: noarch
 Summary: Show the lockscreen pulldown menu in the switcher on the homescreen
-Version: 0.0.1
+Version: 0.1.0
 Release: 1
 Group: System/Patches
 License: TODO
 Source0: %{name}-%{version}.tar.xz
 Requires: patchmanager
-Requires: sailfish-version >= 2.0.1
+Requires: sailfish-version >= 2.0.4
 
 %description
 %{summary}
